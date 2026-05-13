@@ -8,6 +8,7 @@ from app.config import settings
 from app.database.collections import OTP_CHALLENGES_COLLECTION
 from app.database.mongodb import get_database
 from app.models.otp_model import create_otp_challenge_document
+from app.services.email_service import send_email_otp
 from app.services.sms_service import send_sms_otp
 from app.utils.validators import is_valid_phone
 
@@ -73,6 +74,8 @@ async def create_otp_challenge(identifier: str, purpose: str) -> dict:
     delivery = None
     if is_phone_identifier(normalized):
         delivery = send_sms_otp(normalized, code)
+    elif "@" in normalized:
+        delivery = send_email_otp(normalized, code)
 
     data = {
         "identifier": normalized,

@@ -18,4 +18,10 @@ dependencies = [
     "pydantic-settings",
     "google-auth",
     "requests",
+    "langchain",
+    "langchain-community",
+    "langchain-openai",
+    "langchain-mistralai",
+    "langchain-google-genai",
+    "langchain-mongodb",
 ]

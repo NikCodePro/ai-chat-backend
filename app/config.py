@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     TWO_FACTOR_API_KEY: str = ""
     TWO_FACTOR_SMS_TIMEOUT_SECONDS: int = 10
     GOOGLE_CLIENT_ID: str = ""
+    
+    # SMTP Settings for Email OTP
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+
+    # LLM API Keys
+    MISTRAL_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    DEFAULT_LLM_MODEL: str = "mistral-large-latest"
 
     CORS_ORIGINS: list[str] = ["*"]
 

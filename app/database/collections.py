@@ -1,3 +1,4 @@
 USERS_COLLECTION = "users"
 REFRESH_TOKENS_COLLECTION = "refresh_tokens"
 OTP_CHALLENGES_COLLECTION = "otp_challenges"
+CHATS_COLLECTION = "chats"
