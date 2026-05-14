@@ -25,13 +25,18 @@ def send_sms_otp(phone: str, otp_code: str) -> dict:
         )
 
     phone_number = phone.lstrip("+")
+    # 2Factor.in standard SMS OTP URL: https://2factor.in/API/V1/{api_key}/SMS/{phone_number}/{otp}/{template_name}
     url = (
         "https://2factor.in/API/V1/"
         f"{quote(settings.TWO_FACTOR_API_KEY)}/SMS/{quote(phone_number)}/{quote(otp_code)}"
     )
+    
+    if settings.TWO_FACTOR_TEMPLATE:
+        url += f"/{quote(settings.TWO_FACTOR_TEMPLATE)}"
 
     try:
-        response = requests.post(
+        # 2Factor API typically uses GET for these URL-based requests
+        response = requests.get(
             url,
             timeout=settings.TWO_FACTOR_SMS_TIMEOUT_SECONDS,
         )
@@ -44,7 +49,7 @@ def send_sms_otp(phone: str, otp_code: str) -> dict:
     if not response.ok:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="2Factor OTP SMS request failed",
+            detail=f"2Factor OTP SMS request failed with status {response.status_code}",
         )
 
     provider_payload = _safe_json(response)

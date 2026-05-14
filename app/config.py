@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     OTP_LENGTH: int = 6
     RETURN_OTP_IN_RESPONSE: bool = True
     TWO_FACTOR_API_KEY: str = ""
+    TWO_FACTOR_TEMPLATE: str = ""
     TWO_FACTOR_SMS_TIMEOUT_SECONDS: int = 10
     GOOGLE_CLIENT_ID: str = ""
     

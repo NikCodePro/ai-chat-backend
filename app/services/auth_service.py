@@ -1,3 +1,4 @@
+from app import config
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -136,7 +137,7 @@ async def login_user(payload: LoginRequest) -> dict:
         return {
             "verification_required": True,
             "message": "Please verify your account to continue.",
-            "otp": otp if settings.RETURN_OTP_IN_RESPONSE else None,
+            "otp": otp if config.RETURN_OTP_IN_RESPONSE else None,
         }
 
     # Log in immediately (No 2FA as per user request)
@@ -154,14 +155,31 @@ async def google_sign_in(google_id_token: str) -> dict:
     user = await get_user_by_email(email)
 
     if not user:
+        # Generate base username from email
+        base_username = email.split("@")[0].replace(".", "_")
+        username = base_username
+        
+        # Check if username is taken, if so, append random suffix
+        counter = 1
+        while await get_user_by_username(username):
+            import random
+            username = f"{base_username}{random.randint(10, 999)}"
+            counter += 1
+            if counter > 5: # Safety break
+                import uuid
+                username = f"{base_username}_{uuid.uuid4().hex[:4]}"
+
         user_document = create_user_document(
-            name=payload.get("name") or email.split("@")[0],
+            name=payload.get("name") or base_username,
+            username=username,
             email=email,
             auth_provider="google",
             google_sub=payload.get("sub"),
         )
         user = await create_user(user_document)
     else:
+        # Link Google account if not linked or update verification
+        from app.database.collections import USERS_COLLECTION
         db = get_database()
         await db[USERS_COLLECTION].update_one(
             {"_id": user["_id"]},
