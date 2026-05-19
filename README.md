@@ -1,4 +1,4 @@
-# AI Chat Backend
+# Sankat Seva
 
 FastAPI backend for an AI chat app with MongoDB, JWT auth, refresh tokens, and a realtime-ready project layout.
 

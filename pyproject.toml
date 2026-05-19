@@ -1,5 +1,5 @@
 [project]
-name = "ai-chat-backend"
+name = "sankat-seva"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -24,4 +24,6 @@ dependencies = [
     "langchain-mistralai",
     "langchain-google-genai",
     "langchain-mongodb",
+    "websockets",
+    "google-genai",
 ]

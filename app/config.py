@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "AI Chat Backend"
+    PROJECT_NAME: str = "Sankat Seva"
     API_VERSION: str = "1.0.0"
     API_PREFIX: str = "/api/v1"
 
@@ -36,9 +36,12 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
     DEFAULT_LLM_MODEL: str = "mistral-large-latest"
 
+    # Gemini model used for voice + chat (file-based)
+    GEMINI_VOICE_MODEL: str = "gemini-1.5-flash"
+
     CORS_ORIGINS: list[str] = ["*"]
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
