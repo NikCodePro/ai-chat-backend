@@ -1,7 +1,14 @@
+import dns.resolver
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from app.config import settings
 
+# Override default resolver to use public DNS servers to resolve MongoDB SRV records on Windows
+try:
+    dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+    dns.resolver.default_resolver.nameservers = ['8.8.8.8', '8.8.4.4', '1.1.1.1']
+except Exception:
+    pass
 
 client: AsyncIOMotorClient | None = None
 database: AsyncIOMotorDatabase | None = None
