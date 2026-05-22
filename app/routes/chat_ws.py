@@ -2,8 +2,9 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 from app.services.jwt_service import verify_access_token
 from app.services.ai_service import AIService
-from app.services.chat_service import get_chat_history, add_message_to_chat
+from app.services.chat_service import get_chat_history, add_message_to_chat, update_chat_title
 from app.websocket.manager import manager
+import asyncio
 
 router = APIRouter(tags=["Chat WebSocket"])
 
@@ -47,25 +48,54 @@ async def chat_websocket(
             # 3. Save user message
             await add_message_to_chat(chat_id, "user", user_message)
 
+            # Check if this is the first message to trigger auto-titling
+            if len(history) == 0:
+                async def generate_and_update_title():
+                    try:
+                        new_title = await AIService.generate_chat_title(user_message, provider)
+                        await update_chat_title(chat_id, new_title)
+                        await websocket.send_text(json.dumps({
+                            "type": "title_update",
+                            "chat_id": chat_id,
+                            "title": new_title
+                        }))
+                    except Exception as e:
+                        print(f"Failed to generate title: {e}")
+                
+                asyncio.create_task(generate_and_update_title())
+
             # 4. Stream AI Response
             full_ai_response = ""
+            socket_active = True
             
             # Send a start signal
-            await websocket.send_text(json.dumps({"type": "start", "chat_id": chat_id}))
+            try:
+                await websocket.send_text(json.dumps({"type": "start", "chat_id": chat_id}))
+            except Exception:
+                socket_active = False
 
             async for chunk in AIService.stream_chat(user_message, history, provider):
                 full_ai_response += chunk
-                await websocket.send_text(json.dumps({
-                    "type": "chunk",
-                    "content": chunk,
-                    "chat_id": chat_id
-                }))
+                if socket_active:
+                    try:
+                        await websocket.send_text(json.dumps({
+                            "type": "chunk",
+                            "content": chunk,
+                            "chat_id": chat_id
+                        }))
+                    except Exception:
+                        socket_active = False
 
             # 5. Save AI response
-            await add_message_to_chat(chat_id, "assistant", full_ai_response)
+            if full_ai_response:
+                await add_message_to_chat(chat_id, "assistant", full_ai_response)
             
             # Send an end signal
-            await websocket.send_text(json.dumps({"type": "end", "chat_id": chat_id}))
+            if socket_active:
+                try:
+                    await websocket.send_text(json.dumps({"type": "end", "chat_id": chat_id}))
+                except Exception:
+                    socket_active = False
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

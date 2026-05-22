@@ -37,6 +37,12 @@ class GeminiLiveService:
                 parts=[types.Part.from_text(text=system_instruction)]
             ),
             response_modalities=[types.Modality.AUDIO],
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(
+                    disabled=False,
+                    silence_duration_ms=600,
+                )
+            ),
         )
 
         if not self.client:
@@ -277,9 +283,6 @@ class GeminiLiveService:
                                         continue
 
                                     if isinstance(data, bytes):
-                                        if ai_is_speaking:
-                                            dropped_while_speaking += 1
-                                            continue
                                         await session.send(
                                             input=types.LiveClientRealtimeInput(
                                                 media_chunks=[
@@ -295,10 +298,6 @@ class GeminiLiveService:
                                         event_type = data.get("type")
 
                                         if event_type == "client_audio":
-                                            if ai_is_speaking:
-                                                dropped_while_speaking += 1
-                                                continue
-
                                             try:
                                                 b64_data = data.get("audio", "")
                                                 padding = len(b64_data) % 4

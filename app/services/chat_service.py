@@ -28,6 +28,27 @@ async def create_new_chat(user_id: str, title: str, model: str) -> dict:
     await db[CHATS_COLLECTION].insert_one(chat_doc)
     return chat_doc
 
+async def update_chat_title(chat_id: str, title: str) -> bool:
+    db = get_database()
+    result = await db[CHATS_COLLECTION].update_one(
+        {"_id": ObjectId(chat_id)},
+        {
+            "$set": {
+                "title": title,
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+    )
+    return result.modified_count > 0
+
+async def delete_chat(chat_id: str, user_id: str) -> bool:
+    db = get_database()
+    result = await db[CHATS_COLLECTION].delete_one({
+        "_id": ObjectId(chat_id),
+        "user_id": ObjectId(user_id)
+    })
+    return result.deleted_count > 0
+
 async def add_message_to_chat(chat_id: str, role: str, content: str):
     db = get_database()
     message = create_message_document(role, content)

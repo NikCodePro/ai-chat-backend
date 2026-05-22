@@ -49,6 +49,17 @@ def create_signup_token(identifier: str) -> str:
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_password_reset_token(identifier: str) -> str:
+    expires_at = _utc_now() + timedelta(minutes=15)  # Reset token valid for 15 mins
+    payload = {
+        "identifier": identifier,
+        "type": "password_reset",
+        "exp": expires_at,
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+
 def verify_access_token(token: str) -> dict:
     try:
         return jwt.decode(
@@ -113,6 +124,32 @@ def verify_signup_token(token: str) -> dict:
         ) from exc
 
     if payload.get("type") != "signup":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
+        )
+    return payload
+
+
+def verify_password_reset_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password reset session has expired. Please verify again.",
+        ) from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password reset token",
+        ) from exc
+
+    if payload.get("type") != "password_reset":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type",

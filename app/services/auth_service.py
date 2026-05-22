@@ -12,6 +12,7 @@ from app.schemas.auth_schema import (
     LoginRequest,
     RegisterRequest,
     SignupCompleteRequest,
+    ForgotPasswordResetRequest,
 )
 from app.schemas.user_schema import serialize_user
 from app.services.google_service import verify_google_id_token
@@ -21,6 +22,8 @@ from app.services.jwt_service import (
     create_signup_token,
     verify_refresh_token,
     verify_signup_token,
+    create_password_reset_token,
+    verify_password_reset_token,
 )
 from app.services.otp_service import (
     create_otp_challenge,
@@ -259,3 +262,93 @@ def _is_verified_for_login(user: dict) -> bool:
     if user.get("phone") and user.get("phone_verified"):
         return True
     return False
+
+async def change_password(user_id: str, current_password: str, new_password: str) -> None:
+    user = await get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+        
+    if user.get("auth_provider") != "password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change password for social login accounts",
+        )
+
+    if not verify_password(current_password, user["password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    update_data = {
+        "password": hash_password(new_password),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    
+    await update_user(user_id, update_data)
+
+
+async def initiate_forgot_password(identifier: str) -> dict:
+    normalized = validate_identifier(identifier)
+    user = await get_user_by_identifier(normalized)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+        
+    if user.get("auth_provider") != "password":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reset password for social login accounts",
+        )
+
+    otp_data = await create_otp_challenge(normalized, "password_reset")
+    return {
+        "message": f"OTP sent to {normalized}",
+        "identifier": normalized,
+        "expires_at": otp_data["expires_at"],
+    }
+
+
+async def verify_forgot_password_otp(identifier: str, code: str) -> dict:
+    normalized = await verify_otp_challenge(identifier, code, "password_reset")
+
+    reset_token = create_password_reset_token(normalized)
+
+    return {
+        "message": "OTP verified successfully",
+        "reset_token": reset_token,
+        "identifier": normalized,
+    }
+
+
+async def reset_password(payload: ForgotPasswordResetRequest) -> dict:
+    token_data = verify_password_reset_token(payload.reset_token)
+    identifier = token_data["identifier"]
+    
+    if normalize_identifier(payload.identifier) != identifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Identifier mismatch",
+        )
+
+    user = await get_user_by_identifier(identifier)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    update_data = {
+        "password": hash_password(payload.new_password),
+        "updated_at": datetime.now(timezone.utc),
+    }
+    
+    await update_user(str(user["_id"]), update_data)
+    
+    return {"message": "Password reset successfully"}

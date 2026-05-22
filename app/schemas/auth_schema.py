@@ -56,6 +56,24 @@ class SignupTokenResponse(BaseModel):
     identifier: str
 
 
+class ForgotPasswordInitiateRequest(BaseModel):
+    identifier: str = Field(min_length=3, max_length=255)
+
+
+class ForgotPasswordVerifyRequest(BaseModel):
+    identifier: str = Field(min_length=3, max_length=255)
+    code: str = Field(min_length=4, max_length=10)
+
+
+class ForgotPasswordResetRequest(BaseModel):
+    identifier: str = Field(min_length=3, max_length=255)
+    reset_token: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ResetTokenResponse(BaseModel):
+    reset_token: str
+    identifier: str
 
 
 class GoogleAuthRequest(BaseModel):
@@ -63,7 +81,11 @@ class GoogleAuthRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str = Field(min_length=1)
+    refresh_token: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=1)
 
 
 class LogoutRequest(BaseModel):
