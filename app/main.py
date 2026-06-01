@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database.mongodb import close_mongo_connection, connect_to_mongo
-from app.routes import auth_routes, health_routes, user_routes, chat_routes, chat_ws
+from app.routes import auth_routes, health_routes, user_routes, chat_routes, chat_ws, avatar_routes
 from app.websocket import voice_socket
 
 
@@ -36,3 +36,4 @@ app.include_router(health_routes.router, prefix=settings.API_PREFIX)
 app.include_router(chat_routes.router, prefix=settings.API_PREFIX)
 app.include_router(chat_ws.router, prefix=settings.API_PREFIX)
 app.include_router(voice_socket.router, prefix=settings.API_PREFIX)
+app.include_router(avatar_routes.router, prefix=settings.API_PREFIX)

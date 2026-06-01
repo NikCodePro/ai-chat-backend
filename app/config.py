@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Gemini model used for voice + chat (file-based)
     GEMINI_VOICE_MODEL: str = "gemini-1.5-flash"
 
+    # HeyGen API Key for AI Video Avatar
+    HEYGEN_API_KEY: str = ""
+
     CORS_ORIGINS: list[str] = ["*"]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

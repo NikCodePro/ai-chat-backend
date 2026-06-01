@@ -19,9 +19,6 @@ class GeminiLiveService:
         self.api_key = api_key or settings.GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
             logger.warning("GOOGLE_API_KEY not set. Gemini Live Service will fail if used.")
-            self.client = None
-        else:
-            self.client = genai.Client(api_key=self.api_key)
 
         self.model = "gemini-2.5-flash-native-audio-preview-12-2025"
 
@@ -45,12 +42,15 @@ class GeminiLiveService:
             ),
         )
 
-        if not self.client:
+        if not self.api_key:
             logger.error("Cannot run Gemini Live Session: No API key configured.")
             await send_to_client_json(
                 {"type": "error", "message": "Backend missing Gemini API key"}
             )
             return
+
+        # Instantiate a new genai.Client locally to prevent concurrency issues and SSL socket state corruption
+        client = genai.Client(api_key=self.api_key)
 
         # ── Queue to decouple client WebSocket reads from Gemini sends ──
         # This lets us reconnect to Gemini without losing the client connection.
@@ -98,7 +98,8 @@ class GeminiLiveService:
         try:
             while not client_disconnected and reconnect_count < max_reconnects:
                 try:
-                    async with self.client.aio.live.connect(
+                    connection_start_time = time.time()
+                    async with client.aio.live.connect(
                         model=self.model, config=config
                     ) as session:
                         if reconnect_count > 0:
@@ -107,9 +108,6 @@ class GeminiLiveService:
                             )
                         else:
                             logger.info("[GEMINI] Connected to Gemini Live API.")
-
-                        # Reset reconnect counter on successful connection
-                        reconnect_count = 0
 
                         # ── Shared state for this session ──
                         ai_is_speaking = False
@@ -380,14 +378,42 @@ class GeminiLiveService:
                         logger.info(
                             "[GEMINI] Session stream ended. Reconnecting for next turn..."
                         )
+                        session_duration = time.time() - connection_start_time
+                        if session_duration > 5.0:
+                            reconnect_count = 0
                         reconnect_count += 1
+
+                        if session_duration <= 5.0:
+                            # If connection was very short, it's unstable.
+                            # Sleep a bit to avoid hammering the API.
+                            await asyncio.sleep(1.0)
+
+                        if not client_disconnected:
+                            try:
+                                await send_to_client_json(
+                                    {
+                                        "type": "warning",
+                                        "message": "AI session interrupted. Reconnecting...",
+                                    }
+                                )
+                            except Exception:
+                                pass
 
                 except Exception as e:
                     logger.error(f"[GEMINI] Connection error: {e}", exc_info=True)
                     reconnect_count += 1
                     if client_disconnected or reconnect_count >= max_reconnects:
                         break
-                    await asyncio.sleep(0.5)
+                    try:
+                        await send_to_client_json(
+                            {
+                                "type": "warning",
+                                "message": f"Connection error: {str(e)}. Retrying...",
+                            }
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1.5)
 
         finally:
             reader_task.cancel()
