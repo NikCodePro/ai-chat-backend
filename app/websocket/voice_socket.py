@@ -55,12 +55,11 @@ async def voice_websocket_endpoint(websocket: WebSocket, token: Optional[str] = 
 
     try:
         await send_to_client_json({"type": "connection_established", "message": "Connected to voice backend"})
-        
-        # Start the Gemini live session
+
         await gemini_live_service.run_session(
             receive_from_client=receive_from_client,
             send_to_client_json=send_to_client_json,
-            send_to_client_bytes=send_to_client_bytes
+            send_to_client_bytes=send_to_client_bytes,
         )
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from voice websocket.")

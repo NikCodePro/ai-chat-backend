@@ -27,7 +27,13 @@ class GeminiLiveService:
         receive_from_client: Callable,
         send_to_client_json: Callable,
         send_to_client_bytes: Callable,
-        system_instruction: str = "You are a helpful voice assistant. Keep responses conversational and brief.",
+        system_instruction: str = (
+            "You are a helpful voice assistant participating in a direct, real-time conversation. "
+            "NEVER describe your thought process, actions, or what you intend to do. "
+            "NEVER use markdown formatting like **bold** or *italic*. "
+            "Just reply directly to the user in the first person as if you are talking to them face-to-face. "
+            "Keep responses highly conversational, natural, and brief."
+        ),
     ):
         config = types.LiveConnectConfig(
             system_instruction=types.Content(
@@ -52,12 +58,12 @@ class GeminiLiveService:
         # Instantiate a new genai.Client locally to prevent concurrency issues and SSL socket state corruption
         client = genai.Client(api_key=self.api_key)
 
-        # ── Queue to decouple client WebSocket reads from Gemini sends ──
+        # Queue to decouple client WebSocket reads from Gemini sends.
         # This lets us reconnect to Gemini without losing the client connection.
         audio_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
         client_disconnected = False
 
-        # ── Task 1: WebSocket reader (lives for the entire client connection) ──
+        # Task 1: WebSocket reader — lives for the entire client connection.
         async def ws_reader():
             nonlocal client_disconnected
             try:
@@ -68,7 +74,6 @@ class GeminiLiveService:
                         client_disconnected = True
                         break
 
-                    # Check for stop signal
                     if isinstance(data, dict) and data.get("type") == "client_stop_stream":
                         logger.info("[WS-READER] Client requested stop")
                         client_disconnected = True
@@ -91,7 +96,7 @@ class GeminiLiveService:
 
         reader_task = asyncio.create_task(ws_reader())
 
-        # ── Gemini session loop (reconnects if the API stream closes) ──
+        # Gemini session loop — reconnects if the API stream closes.
         reconnect_count = 0
         max_reconnects = 10
 
@@ -109,18 +114,19 @@ class GeminiLiveService:
                         else:
                             logger.info("[GEMINI] Connected to Gemini Live API.")
 
-                        # ── Shared state for this session ──
                         ai_is_speaking = False
                         dropped_while_speaking = 0
 
-                        # ── Gemini → Client (receiver) ──────────────────
+                        # Gemini → Client receiver
                         async def gemini_receiver():
                             nonlocal ai_is_speaking, dropped_while_speaking
 
                             is_speaking = False
                             audio_buffer = bytearray()
+                            # 4800 bytes = 100ms at 24kHz PCM16 — sends first audio quickly.
+                            # 24000 bytes = 500ms for subsequent chunks — drastically reduces WebSocket and JS bridge overhead.
                             first_chunk_size = 4800
-                            subsequent_chunk_size = 4800
+                            subsequent_chunk_size = 24000
                             ai_chunk_counter = 0
 
                             try:
@@ -170,7 +176,7 @@ class GeminiLiveService:
                                                     ).decode("utf-8")
                                                     send_ts = time.time() * 1000
 
-                                                    logger.info(
+                                                    logger.debug(
                                                         f"[GEMINI-RX] server_audio {ai_chunk_counter} | "
                                                         f"size: {len(chunk)} bytes | "
                                                         f"buffer_delay: {send_ts - recv_ts:.1f}ms"
@@ -205,7 +211,7 @@ class GeminiLiveService:
                                                 "utf-8"
                                             )
                                             send_ts = time.time() * 1000
-                                            logger.info(
+                                            logger.debug(
                                                 f"[GEMINI-RX] FINAL server_audio {ai_chunk_counter} | "
                                                 f"size: {len(chunk)} bytes"
                                             )
@@ -248,8 +254,6 @@ class GeminiLiveService:
                                             {"type": "ai_interrupted"}
                                         )
 
-                                # If we reach here, the async for loop ended normally.
-                                # This means Gemini closed its receive stream.
                                 logger.info(
                                     "[GEMINI-RX] Receive stream ended normally "
                                     "(Gemini closed the session)"
@@ -260,27 +264,27 @@ class GeminiLiveService:
                             except Exception as e:
                                 logger.error(f"[GEMINI-RX] Error: {e}", exc_info=True)
 
-                        # ── Client → Gemini (sender, reads from queue) ──
+                        # Client → Gemini sender — reads from queue.
                         async def gemini_sender():
                             nonlocal ai_is_speaking, dropped_while_speaking
 
-                            # Drain any stale data left from a previous session
-                            while not audio_queue.empty():
-                                try:
-                                    audio_queue.get_nowait()
-                                except asyncio.QueueEmpty:
-                                    break
+                            # Do NOT drain the queue here. Audio buffered during a
+                            # reconnect gap belongs to an active user utterance and
+                            # must be forwarded to the new session.
 
                             try:
                                 while not client_disconnected:
                                     try:
+                                        # 20ms timeout keeps latency low without busy-waiting.
                                         data = await asyncio.wait_for(
-                                            audio_queue.get(), timeout=0.1
+                                            audio_queue.get(), timeout=0.02
                                         )
                                     except asyncio.TimeoutError:
                                         continue
 
                                     if isinstance(data, bytes):
+                                        if len(data) == 0:
+                                            continue
                                         await session.send(
                                             input=types.LiveClientRealtimeInput(
                                                 media_chunks=[
@@ -321,7 +325,6 @@ class GeminiLiveService:
                                                 logger.error(
                                                     f"[GEMINI-TX] Error sending audio: {inner_e}"
                                                 )
-                                                # If session.send fails, session is dead
                                                 return
 
                                         elif event_type in (
@@ -329,7 +332,7 @@ class GeminiLiveService:
                                             "client_pause_stream",
                                             "client_resume_stream",
                                         ):
-                                            pass  # Handled at protocol level
+                                            pass
 
                                     await asyncio.sleep(0)
 
@@ -338,7 +341,6 @@ class GeminiLiveService:
                             except Exception as e:
                                 logger.error(f"[GEMINI-TX] Error: {e}", exc_info=True)
 
-                        # ── Launch both tasks for this Gemini session ──
                         receiver_task = asyncio.create_task(gemini_receiver())
                         sender_task = asyncio.create_task(gemini_sender())
 
@@ -347,7 +349,6 @@ class GeminiLiveService:
                             return_when=asyncio.FIRST_COMPLETED,
                         )
 
-                        # Log what finished
                         for task in done:
                             try:
                                 task.result()
@@ -358,7 +359,6 @@ class GeminiLiveService:
                                     f"[GEMINI] Task failed: {e}", exc_info=True
                                 )
 
-                        # Cancel remaining task
                         for task in pending:
                             task.cancel()
                             try:
@@ -366,15 +366,12 @@ class GeminiLiveService:
                             except asyncio.CancelledError:
                                 pass
 
-                        # If the CLIENT disconnected, exit entirely
                         if client_disconnected:
                             logger.info(
                                 "[GEMINI] Client disconnected, ending session loop"
                             )
                             break
 
-                        # Otherwise, the Gemini stream ended but client is alive.
-                        # Reconnect to Gemini for the next conversational turn.
                         logger.info(
                             "[GEMINI] Session stream ended. Reconnecting for next turn..."
                         )
@@ -384,9 +381,8 @@ class GeminiLiveService:
                         reconnect_count += 1
 
                         if session_duration <= 5.0:
-                            # If connection was very short, it's unstable.
-                            # Sleep a bit to avoid hammering the API.
-                            await asyncio.sleep(1.0)
+                            # Brief back-off on unstable connections to avoid hammering the API.
+                            await asyncio.sleep(0.3)
 
                         if not client_disconnected:
                             try:
@@ -413,7 +409,7 @@ class GeminiLiveService:
                         )
                     except Exception:
                         pass
-                    await asyncio.sleep(1.5)
+                    await asyncio.sleep(0.5)
 
         finally:
             reader_task.cancel()

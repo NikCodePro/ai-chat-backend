@@ -39,8 +39,17 @@ class Settings(BaseSettings):
     # Gemini model used for voice + chat (file-based)
     GEMINI_VOICE_MODEL: str = "gemini-1.5-flash"
 
-    # HeyGen API Key for AI Video Avatar
+    # xAI Grok Realtime Voice API
+    XAI_API_KEY: str = ""
+
+    # HeyGen LiveAvatar API Key and Avatar Configuration
     HEYGEN_API_KEY: str = ""
+    # Get avatar UUID from: https://app.liveavatar.com (Avatars tab)
+    LIVEAVATAR_AVATAR_ID: str = ""
+    # Get voice UUID from: https://app.liveavatar.com (Voices tab). Leave blank to use avatar's default voice.
+    LIVEAVATAR_VOICE_ID: str = ""
+    # Language for the avatar (e.g., 'en', 'hi', 'en-IN')
+    LIVEAVATAR_LANGUAGE: str = "en"
 
     CORS_ORIGINS: list[str] = ["*"]
 
